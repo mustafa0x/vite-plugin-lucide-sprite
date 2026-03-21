@@ -5,6 +5,8 @@ import {createRequire} from 'node:module'
 import path from 'node:path'
 import {parse as parse_svelte} from 'svelte/compiler'
 
+export {run_lucide_sprite_codemod} from './codemod.js'
+
 const require = createRequire(import.meta.url)
 const lucide_static_icons_dir = path.join(path.dirname(require.resolve('lucide-static/package.json')), 'icons')
 const normalize_path = (value: string) => value.split(path.sep).join('/')

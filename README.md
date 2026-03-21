@@ -33,6 +33,37 @@ Exact savings vary by icon, usage count, and gzip/brotli, but a practical rule o
 pnpm add -D vite-plugin-lucide-sprite lucide-static
 ```
 
+## Codemod CLI
+
+Run the migration codemod in your app:
+
+```bash
+pnpm exec vite-plugin-lucide-sprite --dry-run
+pnpm exec vite-plugin-lucide-sprite
+```
+
+What it migrates:
+
+- Replaces mapped `@lucide/svelte` component usages with `<Icon id="...">`
+- Updates/cleans `@lucide/svelte` imports
+- Migrates `src/components/Icon.svelte` to sprite-based behavior
+- Adds `.icon-lucide` CSS in `src/css/base.css`
+- Adds `lucide_sprite_plugin()` to `vite.config.js`
+- Updates `build.js` sprite-copy flow
+- Updates `package.json` dependencies (`lucide-static`, `vite-plugin-lucide-sprite`) and removes `predev`/`prebuild`
+
+Current component mapping:
+
+- `Check -> check`
+- `ChevronDown -> chevron-down`
+- `Loader2 -> loader-circle`
+- `LoaderCircle -> loader-circle`
+- `Moon -> moon`
+- `Sun -> sun`
+- `Trash -> trash`
+- `WifiOff -> wifi-off`
+- `X -> x`
+
 ## Quick start
 
 `vite.config.js`:

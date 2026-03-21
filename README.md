@@ -40,7 +40,13 @@ Run the migration codemod in your app:
 ```bash
 pnpm exec vite-plugin-lucide-sprite --dry-run
 pnpm exec vite-plugin-lucide-sprite
+pnpm exec vite-plugin-lucide-sprite --force
 ```
+
+Safety behavior:
+
+- By default, the codemod exits if `git status --porcelain` is not clean.
+- Use `--force` to bypass this guard.
 
 What it migrates:
 

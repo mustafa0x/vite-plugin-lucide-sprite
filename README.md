@@ -35,18 +35,52 @@ export default defineConfig({
 })
 ```
 
-`src/components/Icon.svelte`:
+`src/components/Icon.svelte` (complete example):
 
 ```svelte
 <script module>
-export const LUCIDE_ICON_IDS = ['check', 'x', 'sun']
+export const LUCIDE_ICON_IDS = ['check', 'x', 'sun', 'moon']
 </script>
+
+<script>
+let {id, size = 24, color = 'currentColor', ...rest} = $props()
+
+const is_lucide = $derived(LUCIDE_ICON_IDS.includes(id))
+const sprite_name = $derived(is_lucide ? 'lucide.svg' : 'icons.svg')
+const sprite_href = $derived(`${import.meta.env.BASE_URL}${sprite_name}#${id}`)
+</script>
+
+<svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    {...rest}
+>
+    <use href={sprite_href}></use>
+</svg>
 ```
 
-Then reference icons with:
+Use it in app code:
 
-```html
-<use href={`${import.meta.env.BASE_URL}lucide.svg#check`}></use>
+```svelte
+<Icon id="check" />
+```
+
+If you are rendering `<use>` directly (without an `Icon` wrapper), define the href in script first:
+
+```svelte
+<script>
+const sprite_href = `${import.meta.env.BASE_URL}lucide.svg#check`
+</script>
+
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <use href={sprite_href}></use>
+</svg>
 ```
 
 ## Options
@@ -135,4 +169,3 @@ The package is authored in TypeScript and ships:
 
 - `dist/index.js`
 - `dist/index.d.ts`
-

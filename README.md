@@ -52,7 +52,7 @@ pnpm exec vite-plugin-lucide-sprite --force
 Default source directory is `./src`; pass `--source-dir <dir>` if your app uses another directory.
 Default Icon path is `<source_dir>/lib/components/Icon.svelte`.
 If `<source_dir>/lib/components` does not exist, pass `--icon-component-path <path>`.
-By default, CLI also installs missing dependencies (`vite-plugin-lucide-sprite`, `lucide-static`).
+By default, CLI also installs missing dependencies (`vite-plugin-lucide-sprite`, `lucide-static@latest`).
 Use `--no-install` to skip that step.
 
 Safety behavior:
@@ -63,10 +63,10 @@ Safety behavior:
 What it migrates:
 
 - Replaces mapped `@lucide/svelte` component usages with `<Icon id="...">`
-- Updates/cleans `@lucide/svelte` imports
+- Updates/cleans `@lucide/svelte` imports (rewritten to `import Icon from '$icon'`)
 - Removes `@lucide/svelte` from `dependencies`/`devDependencies`
 - Creates `Icon.svelte` if missing
-- Updates matching core files (`<source_dir>/css/base.css`, `vite.config.js`, `package.json`)
+- Updates matching core files (`<source_dir>/css/base.css`, `vite.config.js`, `package.json`, `tsconfig.json`/`jsconfig.json`)
 
 Current component mapping:
 
@@ -89,7 +89,7 @@ import {defineConfig} from 'vite'
 import lucide_sprite_plugin from 'vite-plugin-lucide-sprite'
 
 export default defineConfig({
-    plugins: [lucide_sprite_plugin()],
+    plugins: [lucide_sprite_plugin({icon_component_path: 'src/lib/components/Icon.svelte'})],
 })
 ```
 

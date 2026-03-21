@@ -52,7 +52,7 @@ function get_missing_dependencies(root_dir: string): string[] {
     const has = (name: string) => !!dependencies[name] || !!dev_dependencies[name]
     const missing: string[] = []
     if (!has('vite-plugin-lucide-sprite')) missing.push(`vite-plugin-lucide-sprite@^${get_self_version()}`)
-    if (!has('lucide-static')) missing.push('lucide-static')
+    if (!has('lucide-static')) missing.push('lucide-static@latest')
     return missing
 }
 

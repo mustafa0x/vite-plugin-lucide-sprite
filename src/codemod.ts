@@ -76,13 +76,6 @@ function get_svelte_files(dir_path: string): string[] {
     return results
 }
 
-function get_icon_import_path(state: State, file_path: string): string {
-    const target = path.join(state.root_dir, state.icon_component_path)
-    let relative = normalize_path(path.relative(path.dirname(file_path), target))
-    if (!relative.startsWith('.')) relative = `./${relative}`
-    return relative
-}
-
 function replace_lucide_components(state: State, source: string, names_to_replace: string[]) {
     let output = source
     let changed = false
@@ -173,7 +166,7 @@ function migrate_svelte_files(state: State): void {
                 new Set(names_to_replace),
             )
 
-            return ensure_icon_import(without_lucide_import, get_icon_import_path(state, file_path))
+            return ensure_icon_import(without_lucide_import, '$icon')
         })
     }
 }
@@ -275,6 +268,32 @@ function migrate_vite_config(state: State): void {
     })
 }
 
+function migrate_tsconfig_alias(state: State, relative_path: string): void {
+    const before = read_text_file(state, relative_path)
+    if (before == null) return
+
+    const config = JSON.parse(before) as Record<string, any>
+    const prev_base_url = config.compilerOptions?.baseUrl
+    const prev_alias = config.compilerOptions?.paths?.$icon
+
+    config.compilerOptions ||= {}
+    config.compilerOptions.baseUrl ||= '.'
+    config.compilerOptions.paths ||= {}
+    config.compilerOptions.paths.$icon = [normalize_path(state.icon_component_path)]
+
+    if (
+        prev_base_url === config.compilerOptions.baseUrl &&
+        JSON.stringify(prev_alias) === JSON.stringify(config.compilerOptions.paths.$icon)
+    ) {
+        return
+    }
+
+    const after = `${JSON.stringify(config, null, 2)}\n`
+    if (after === before) return
+    state.changed_files.push(relative_path)
+    if (!state.dry_run) write_text_file(state, relative_path, after)
+}
+
 function migrate_package_json(state: State): void {
     const relative_path = 'package.json'
     const before = read_text_file(state, relative_path)
@@ -285,7 +304,7 @@ function migrate_package_json(state: State): void {
     if (pkg.dependencies) delete pkg.dependencies['@lucide/svelte']
     if (pkg.dependencies && Object.keys(pkg.dependencies).length === 0) delete pkg.dependencies
     delete pkg.devDependencies['@lucide/svelte']
-    pkg.devDependencies['lucide-static'] ||= '^0.562.0'
+    pkg.devDependencies['lucide-static'] ||= 'latest'
 
     const after = `${JSON.stringify(pkg, null, 2)}\n`
     if (after === before) return
@@ -298,6 +317,8 @@ function run_all_migrations(state: State): void {
     create_icon_component(state)
     migrate_css(state)
     migrate_vite_config(state)
+    migrate_tsconfig_alias(state, 'tsconfig.json')
+    migrate_tsconfig_alias(state, 'jsconfig.json')
     migrate_package_json(state)
 }
 

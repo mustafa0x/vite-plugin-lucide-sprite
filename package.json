@@ -1,0 +1,36 @@
+{
+  "name": "vite-plugin-lucide-sprite",
+  "version": "0.1.0",
+  "description": "Vite plugin that generates a Lucide SVG sprite from icon ids exported in a Svelte component",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "svelte",
+    "lucide",
+    "svg-sprite"
+  ],
+  "author": "mustafa0x",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mustafa0x/vite-plugin-lucide-sprite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mustafa0x/vite-plugin-lucide-sprite/issues"
+  },
+  "homepage": "https://github.com/mustafa0x/vite-plugin-lucide-sprite#readme",
+  "peerDependencies": {
+    "lucide-static": ">=0.400.0",
+    "vite": ">=5",
+    "svelte": ">=5"
+  }
+}

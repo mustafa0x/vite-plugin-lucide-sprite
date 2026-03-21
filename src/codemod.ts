@@ -5,6 +5,7 @@ export type RunLucideSpriteCodemodOptions = {
     root_dir?: string
     dry_run?: boolean
     source_dir?: string
+    icon_component_path?: string
 }
 
 export type RunLucideSpriteCodemodResult = {
@@ -28,6 +29,7 @@ type State = {
     root_dir: string
     dry_run: boolean
     source_dir: string
+    icon_component_path: string
     changed_files: string[]
     found_lucide_ids: Set<string>
 }
@@ -75,7 +77,7 @@ function get_svelte_files(dir_path: string): string[] {
 }
 
 function get_icon_import_path(state: State, file_path: string): string {
-    const target = path.join(state.root_dir, `${state.source_dir}/components/Icon.svelte`)
+    const target = path.join(state.root_dir, state.icon_component_path)
     let relative = normalize_path(path.relative(path.dirname(file_path), target))
     if (!relative.startsWith('.')) relative = `./${relative}`
     return relative
@@ -148,7 +150,7 @@ function migrate_svelte_files(state: State): void {
     if (!existsSync(src_dir)) return
 
     const files = get_svelte_files(src_dir).filter(
-        file => normalize_path(file) !== normalize_path(path.join(state.root_dir, `${state.source_dir}/components/Icon.svelte`)),
+        file => normalize_path(file) !== normalize_path(path.join(state.root_dir, state.icon_component_path)),
     )
     for (const file_path of files) {
         const relative_path = normalize_path(path.relative(state.root_dir, file_path))
@@ -181,57 +183,13 @@ function to_lucide_icon_ids_array(ids: string[]): string {
     return `export const LUCIDE_ICON_IDS = [\n${ids.map(id => `    '${id}',`).join('\n')}\n]`
 }
 
-function migrate_icon_component(state: State): void {
-    const relative_path = `${state.source_dir}/components/Icon.svelte`
-    const before = read_text_file(state, relative_path)
-    if (before == null) return
-
-    const existing_ids = new Set<string>()
-    const existing_block_regex = /export const LUCIDE_ICON_IDS\s*=\s*\[[\s\S]*?\]/m
-    const existing_block_match = before.match(/export const LUCIDE_ICON_IDS\s*=\s*\[([\s\S]*?)\]/m)
-    if (existing_block_match) {
-        const matches = existing_block_match[1].matchAll(/'([^']+)'/g)
-        for (const match of matches) existing_ids.add(match[1])
-    }
-
-    for (const id of existing_ids) state.found_lucide_ids.add(id)
+function create_icon_component(state: State): void {
+    const relative_path = state.icon_component_path
+    if (read_text_file(state, relative_path) != null) return
 
     const icon_ids = [...state.found_lucide_ids].sort()
-    const ids_block = to_lucide_icon_ids_array(icon_ids)
-
-    const is_already_migrated =
-        before.includes('const sprite_href = $derived') && before.includes('LUCIDE_ICON_IDS.includes(id)')
-    if (is_already_migrated) {
-        if (!existing_block_regex.test(before)) return
-        const next = before.replace(existing_block_regex, ids_block)
-        if (next !== before) {
-            state.changed_files.push(relative_path)
-            if (!state.dry_run) write_text_file(state, relative_path, next)
-        }
-        return
-    }
-
-    const next = `<svg
-    class={['icon', \`icon-\${id}\`, is_lucide && 'icon-lucide', class_name]}
-    style:width={size_css}
-    style:height={size_css}
-    {...is_lucide
-        ? {
-              viewBox: '0 0 24 24',
-              fill: 'none',
-              stroke: color,
-              'stroke-width': computed_stroke_width,
-              'stroke-linecap': 'round',
-              'stroke-linejoin': 'round',
-          }
-        : {}}
-    {...rest}
->
-    <use href={sprite_href}></use>
-</svg>
-
-<script module>
-${ids_block}
+    const content = `<script module>
+${to_lucide_icon_ids_array(icon_ids)}
 </script>
 
 <script>
@@ -245,9 +203,7 @@ let {
     ...rest
 } = $props()
 
-const is_lucide = $derived(LUCIDE_ICON_IDS.includes(id))
-const sprite_name = $derived(is_lucide ? 'lucide.svg' : 'icons.svg')
-const sprite_href = $derived(\`\${import.meta.env.BASE_URL}\${sprite_name}#\${id}\`)
+const sprite_href = $derived(\`\${import.meta.env.BASE_URL}lucide.svg#\${id}\`)
 const size_css = $derived.by(() => {
     if (size == null) return undefined
     if (typeof size === 'number') return \`\${size}px\`
@@ -257,17 +213,30 @@ const size_css = $derived.by(() => {
 })
 const numeric_size = $derived(Number(size))
 const computed_stroke_width = $derived(
-    is_lucide && absoluteStrokeWidth && Number.isFinite(numeric_size) && numeric_size > 0
+    absoluteStrokeWidth && Number.isFinite(numeric_size) && numeric_size > 0
         ? (Number(strokeWidth) * 24) / numeric_size
         : strokeWidth,
 )
 </script>
+
+<svg
+    class={['icon', \`icon-\${id}\`, 'icon-lucide', class_name]}
+    style:width={size_css}
+    style:height={size_css}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    stroke-width={computed_stroke_width}
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    {...rest}
+>
+    <use href={sprite_href}></use>
+</svg>
 `
 
-    if (next !== before) {
-        state.changed_files.push(relative_path)
-        if (!state.dry_run) write_text_file(state, relative_path, next)
-    }
+    state.changed_files.push(relative_path)
+    if (!state.dry_run) write_text_file(state, relative_path, content)
 }
 
 function migrate_css(state: State): void {
@@ -283,6 +252,10 @@ function migrate_vite_config(state: State): void {
     update_text_file(state, 'vite.config.js', before => {
         let next = before
         const import_line = "import lucide_sprite_plugin from 'vite-plugin-lucide-sprite'\n"
+        const plugin_call =
+            state.icon_component_path === 'src/components/Icon.svelte'
+                ? 'lucide_sprite_plugin(),'
+                : `lucide_sprite_plugin({icon_component_path: '${state.icon_component_path}'}),`
         if (!next.includes(import_line.trim())) {
             next = next.replace(
                 /import lucide_sprite_plugin from ['"].*?vite-plugin-lucide-sprite.*?['"]\n?/g,
@@ -293,37 +266,11 @@ function migrate_vite_config(state: State): void {
                 match => `${match}${import_line}`,
             )
         }
-        if (!next.includes('lucide_sprite_plugin(),')) {
-            next = next.replace(/plugins:\s*\[\n/, match => `${match}        lucide_sprite_plugin(),\n`)
+        if (next.includes('lucide_sprite_plugin(')) {
+            next = next.replace(/lucide_sprite_plugin\([^)]*\),/g, plugin_call)
+        } else {
+            next = next.replace(/plugins:\s*\[\n/, match => `${match}        ${plugin_call}\n`)
         }
-        return next
-    })
-}
-
-function migrate_build_script(state: State): void {
-    update_text_file(state, 'build.js', before => {
-        let next = before
-        next = next.replace(
-            "import {existsSync as exists, readFileSync, writeFileSync as write} from 'fs'",
-            "import {cpSync, existsSync as exists, readFileSync, writeFileSync as write} from 'fs'",
-        )
-
-        const old_icon_block =
-            /const icon_repls = \[[\s\S]*?write\('dist-native\/index\.html', pg_native \+ icons\)\n\nexec\(`cp -LR public\/\* dist-native`, \{shell: true\}\)\n?/
-        if (old_icon_block.test(next)) {
-            next = next.replace(
-                old_icon_block,
-                "write('dist/index.html', pg)\nwrite('dist-native/index.html', pg_native)\n\ncpSync('public', 'dist', {recursive: true})\ncpSync('public', 'dist-native', {recursive: true})\n",
-            )
-        }
-
-        if (next.includes("exec(`cp -LR public/* dist-native`, {shell: true})")) {
-            next = next.replace(
-                "exec(`cp -LR public/* dist-native`, {shell: true})",
-                "cpSync('public', 'dist', {recursive: true})\ncpSync('public', 'dist-native', {recursive: true})",
-            )
-        }
-
         return next
     })
 }
@@ -335,14 +282,10 @@ function migrate_package_json(state: State): void {
     const pkg = JSON.parse(before) as Record<string, any>
 
     pkg.devDependencies ||= {}
+    if (pkg.dependencies) delete pkg.dependencies['@lucide/svelte']
+    if (pkg.dependencies && Object.keys(pkg.dependencies).length === 0) delete pkg.dependencies
     delete pkg.devDependencies['@lucide/svelte']
     pkg.devDependencies['lucide-static'] ||= '^0.562.0'
-    pkg.devDependencies['vite-plugin-lucide-sprite'] ||= '^0.1.0'
-
-    if (pkg.scripts) {
-        delete pkg.scripts.prebuild
-        delete pkg.scripts.predev
-    }
 
     const after = `${JSON.stringify(pkg, null, 2)}\n`
     if (after === before) return
@@ -352,11 +295,22 @@ function migrate_package_json(state: State): void {
 
 function run_all_migrations(state: State): void {
     migrate_svelte_files(state)
-    migrate_icon_component(state)
+    create_icon_component(state)
     migrate_css(state)
     migrate_vite_config(state)
-    migrate_build_script(state)
     migrate_package_json(state)
+}
+
+function resolve_icon_component_path(root_dir: string, source_dir: string, preferred?: string): string {
+    if (preferred) return normalize_path(preferred)
+
+    const default_path = normalize_path(`${source_dir}/lib/components/Icon.svelte`)
+    const default_dir = path.dirname(path.join(root_dir, default_path))
+    if (existsSync(default_dir)) return default_path
+
+    throw new Error(
+        `Default Icon path "${default_path}" is not available. Pass --icon-component-path <path>.`,
+    )
 }
 
 export function run_lucide_sprite_codemod(
@@ -370,11 +324,13 @@ export function run_lucide_sprite_codemod(
             : 'Default source directory "./src" was not found. Pass --source-dir <dir>.'
         throw new Error(message)
     }
+    const icon_component_path = resolve_icon_component_path(root_dir, source_dir, user.icon_component_path)
 
     const state: State = {
         root_dir,
         dry_run: !!user.dry_run,
         source_dir,
+        icon_component_path,
         changed_files: [],
         found_lucide_ids: new Set<string>(),
     }

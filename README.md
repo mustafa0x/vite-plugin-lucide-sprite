@@ -35,7 +35,13 @@ pnpm add -D vite-plugin-lucide-sprite lucide-static
 
 ## Codemod CLI
 
-Run the migration codemod in your app:
+One command upgrade flow (temporary install + migrate):
+
+```bash
+pnpm dlx vite-plugin-lucide-sprite@latest
+```
+
+Run with a locally installed package:
 
 ```bash
 pnpm exec vite-plugin-lucide-sprite --dry-run
@@ -44,6 +50,10 @@ pnpm exec vite-plugin-lucide-sprite --force
 ```
 
 Default source directory is `./src`; pass `--source-dir <dir>` if your app uses another directory.
+Default Icon path is `<source_dir>/lib/components/Icon.svelte`.
+If `<source_dir>/lib/components` does not exist, pass `--icon-component-path <path>`.
+By default, CLI also installs missing dependencies (`vite-plugin-lucide-sprite`, `lucide-static`).
+Use `--no-install` to skip that step.
 
 Safety behavior:
 
@@ -54,8 +64,9 @@ What it migrates:
 
 - Replaces mapped `@lucide/svelte` component usages with `<Icon id="...">`
 - Updates/cleans `@lucide/svelte` imports
-- Migrates `<source_dir>/components/Icon.svelte` to sprite-based behavior
-- Updates common project files when matching patterns are found (`vite.config.js`, `package.json`, and optional build/CSS files)
+- Removes `@lucide/svelte` from `dependencies`/`devDependencies`
+- Creates `Icon.svelte` if missing
+- Updates matching core files (`<source_dir>/css/base.css`, `vite.config.js`, `package.json`)
 
 Current component mapping:
 
@@ -82,7 +93,7 @@ export default defineConfig({
 })
 ```
 
-`src/components/Icon.svelte` (complete example):
+`src/lib/components/Icon.svelte` (complete example):
 
 ```svelte
 <script module>
@@ -92,9 +103,7 @@ export const LUCIDE_ICON_IDS = ['check', 'x', 'sun', 'moon']
 <script>
 let {id, size = 24, color = 'currentColor', ...rest} = $props()
 
-const is_lucide = $derived(LUCIDE_ICON_IDS.includes(id))
-const sprite_name = $derived(is_lucide ? 'lucide.svg' : 'icons.svg')
-const sprite_href = $derived(`${import.meta.env.BASE_URL}${sprite_name}#${id}`)
+const sprite_href = $derived(`${import.meta.env.BASE_URL}lucide.svg#${id}`)
 </script>
 
 <svg

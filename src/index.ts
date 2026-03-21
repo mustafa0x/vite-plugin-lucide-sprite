@@ -15,6 +15,7 @@ export type LucideSpritePluginOptions = {
     icon_component_path?: string
     icon_ids_export_name?: string
     output_file_name?: string
+    minify?: boolean
 }
 
 type SpriteData = {
@@ -66,7 +67,11 @@ function read_lucide_icon_ids(icon_component_path: string, icon_ids_export_name:
     })
 }
 
-function build_lucide_sprite(icon_component_path: string, icon_ids_export_name: string): SpriteData {
+function minify_svg_markup(svg: string): string {
+    return svg.replace(/\n\s*/g, '').replace(/>\s+</g, '><').trim()
+}
+
+function build_lucide_sprite(icon_component_path: string, icon_ids_export_name: string, minify: boolean): SpriteData {
     const icon_ids = [...new Set(read_lucide_icon_ids(icon_component_path, icon_ids_export_name))].sort()
     const symbols = icon_ids
         .map(icon_id => {
@@ -84,15 +89,17 @@ function build_lucide_sprite(icon_component_path: string, icon_ids_export_name: 
         })
         .join('\n')
 
-    return {
-        icon_count: icon_ids.length,
-        sprite: `<?xml version="1.0" encoding="UTF-8"?>
+    const sprite = `<?xml version="1.0" encoding="UTF-8"?>
 <svg style="display: none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
   <defs>
 ${symbols}
   </defs>
 </svg>
-`,
+`
+
+    return {
+        icon_count: icon_ids.length,
+        sprite: minify ? minify_svg_markup(sprite) : sprite,
     }
 }
 
@@ -100,6 +107,7 @@ export default function lucide_sprite_plugin(user: LucideSpritePluginOptions = {
     const output_file_name = String(user.output_file_name ?? 'lucide.svg').replace(/^\/+/, '')
     const icon_ids_export_name = user.icon_ids_export_name ?? 'LUCIDE_ICON_IDS'
     const icon_component_path = user.icon_component_path ?? 'src/components/Icon.svelte'
+    const minify = user.minify ?? true
 
     let root_path = process.cwd()
     let base_path = '/'
@@ -115,7 +123,7 @@ export default function lucide_sprite_plugin(user: LucideSpritePluginOptions = {
 
     const ensure_sprite = (): SpriteData => {
         if (cached_sprite) return {icon_count: cached_icon_count, sprite: cached_sprite}
-        const {icon_count, sprite} = build_lucide_sprite(resolved_icon_component_path, icon_ids_export_name)
+        const {icon_count, sprite} = build_lucide_sprite(resolved_icon_component_path, icon_ids_export_name, minify)
         cached_sprite = sprite
         cached_icon_count = icon_count
         return {icon_count, sprite}

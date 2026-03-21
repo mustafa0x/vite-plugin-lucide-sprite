@@ -138,6 +138,7 @@ type LucideSpritePluginOptions = {
     icon_component_path?: string
     icon_ids_export_name?: string
     output_file_name?: string
+    minify?: boolean
 }
 ```
 
@@ -150,6 +151,9 @@ type LucideSpritePluginOptions = {
 - `output_file_name`:
   - Default: `'lucide.svg'`
   - Output file name (served in dev and emitted in build)
+- `minify`:
+  - Default: `true`
+  - Minifies generated sprite markup (collapses line breaks/indentation)
 
 Example with custom values:
 
@@ -158,6 +162,7 @@ lucide_sprite_plugin({
     icon_component_path: 'src/lib/ui/Icon.svelte',
     icon_ids_export_name: 'APP_LUCIDE_ICONS',
     output_file_name: 'assets/lucide.svg',
+    minify: true,
 })
 ```
 
@@ -199,6 +204,7 @@ export const LUCIDE_ICON_IDS = [...base, dynamic_icon]
 - Output details:
   - IDs are deduplicated with `Set`
   - IDs are sorted before generation
+  - Sprite markup is minified by default
 
 ## Troubleshooting
 

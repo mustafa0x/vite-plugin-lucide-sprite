@@ -11,7 +11,7 @@ This avoids repeating full SVG path markup every time an icon appears in your HT
 - With a sprite, each icon usage is usually just a short `<use href="...#id">` reference
 - In practice, repeated icon instances often save roughly `~0.4-0.5 KB` each before compression
 
-Exact savings vary by icon, usage count, and gzip/brotli, but your estimate (`~0.5 KB per icon`) is a solid rule of thumb.
+Exact savings vary by icon, usage count, and gzip/brotli, but a practical rule of thumb is `~0.4-0.5 KB` per repeated icon instance.
 
 ## What it does
 

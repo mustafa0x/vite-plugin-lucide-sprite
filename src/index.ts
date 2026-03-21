@@ -1,17 +1,30 @@
-import {parse as parse_svelte} from 'svelte/compiler'
+import type {Plugin} from 'vite'
+
 import {readFileSync} from 'node:fs'
 import {createRequire} from 'node:module'
 import path from 'node:path'
+import {parse as parse_svelte} from 'svelte/compiler'
 
 const require = createRequire(import.meta.url)
 const lucide_static_icons_dir = path.join(path.dirname(require.resolve('lucide-static/package.json')), 'icons')
-const normalize_path = value => value.split(path.sep).join('/')
+const normalize_path = (value: string) => value.split(path.sep).join('/')
 
-function read_lucide_icon_ids(icon_component_path, icon_ids_export_name) {
+export type LucideSpritePluginOptions = {
+    icon_component_path?: string
+    icon_ids_export_name?: string
+    output_file_name?: string
+}
+
+type SpriteData = {
+    icon_count: number
+    sprite: string
+}
+
+function read_lucide_icon_ids(icon_component_path: string, icon_ids_export_name: string): string[] {
     const source = readFileSync(icon_component_path, 'utf8')
     const ast = parse_svelte(source, {filename: icon_component_path})
     const module_body = ast.module?.content?.body ?? []
-    let icon_ids_expression = null
+    let icon_ids_expression: any = null
 
     for (const statement of module_body) {
         if (statement.type !== 'ExportNamedDeclaration') continue
@@ -34,7 +47,7 @@ function read_lucide_icon_ids(icon_component_path, icon_ids_export_name) {
         throw new Error(`${icon_ids_export_name} in ${path.basename(icon_component_path)} must be an array literal.`)
     }
 
-    return icon_ids_expression.elements.map((element, index) => {
+    return icon_ids_expression.elements.map((element: any, index: number) => {
         if (!element) {
             throw new Error(`${icon_ids_export_name}[${index}] in ${path.basename(icon_component_path)} cannot be empty.`)
         }
@@ -51,7 +64,7 @@ function read_lucide_icon_ids(icon_component_path, icon_ids_export_name) {
     })
 }
 
-function build_lucide_sprite(icon_component_path, icon_ids_export_name) {
+function build_lucide_sprite(icon_component_path: string, icon_ids_export_name: string): SpriteData {
     const icon_ids = [...new Set(read_lucide_icon_ids(icon_component_path, icon_ids_export_name))].sort()
     const symbols = icon_ids
         .map(icon_id => {
@@ -81,7 +94,7 @@ ${symbols}
     }
 }
 
-export default function lucide_sprite_plugin(user = {}) {
+export default function lucide_sprite_plugin(user: LucideSpritePluginOptions = {}): Plugin {
     const output_file_name = String(user.output_file_name ?? 'lucide.svg').replace(/^\/+/, '')
     const icon_ids_export_name = user.icon_ids_export_name ?? 'LUCIDE_ICON_IDS'
     const icon_component_path = user.icon_component_path ?? 'src/components/Icon.svelte'
@@ -89,7 +102,7 @@ export default function lucide_sprite_plugin(user = {}) {
     let root_path = process.cwd()
     let base_path = '/'
     let resolved_icon_component_path = path.resolve(root_path, icon_component_path)
-    let cached_sprite = null
+    let cached_sprite: string | null = null
     let cached_icon_count = 0
     let icon_component_file_path = normalize_path(resolved_icon_component_path)
 
@@ -98,7 +111,7 @@ export default function lucide_sprite_plugin(user = {}) {
         cached_icon_count = 0
     }
 
-    const ensure_sprite = () => {
+    const ensure_sprite = (): SpriteData => {
         if (cached_sprite) return {icon_count: cached_icon_count, sprite: cached_sprite}
         const {icon_count, sprite} = build_lucide_sprite(resolved_icon_component_path, icon_ids_export_name)
         cached_sprite = sprite

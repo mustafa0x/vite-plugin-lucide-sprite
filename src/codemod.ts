@@ -1,9 +1,10 @@
-import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync} from 'node:fs'
+import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from 'node:fs'
 import path from 'node:path'
 
 export type RunLucideSpriteCodemodOptions = {
     root_dir?: string
     dry_run?: boolean
+    source_dir?: string
 }
 
 export type RunLucideSpriteCodemodResult = {
@@ -26,6 +27,7 @@ const lucide_component_to_id: Record<string, string> = {
 type State = {
     root_dir: string
     dry_run: boolean
+    source_dir: string
     changed_files: string[]
     found_lucide_ids: Set<string>
 }
@@ -55,13 +57,6 @@ function update_text_file(state: State, relative_path: string, updater: (before:
     if (!state.dry_run) write_text_file(state, relative_path, after)
 }
 
-function delete_file(state: State, relative_path: string): void {
-    const absolute_path = path.join(state.root_dir, relative_path)
-    if (!existsSync(absolute_path)) return
-    state.changed_files.push(relative_path)
-    if (!state.dry_run) rmSync(absolute_path, {force: true})
-}
-
 function get_svelte_files(dir_path: string): string[] {
     const entries = readdirSync(dir_path)
     const results: string[] = []
@@ -80,7 +75,7 @@ function get_svelte_files(dir_path: string): string[] {
 }
 
 function get_icon_import_path(state: State, file_path: string): string {
-    const target = path.join(state.root_dir, 'src/components/Icon.svelte')
+    const target = path.join(state.root_dir, `${state.source_dir}/components/Icon.svelte`)
     let relative = normalize_path(path.relative(path.dirname(file_path), target))
     if (!relative.startsWith('.')) relative = `./${relative}`
     return relative
@@ -149,11 +144,11 @@ function ensure_icon_import(source: string, import_path: string): string {
 }
 
 function migrate_svelte_files(state: State): void {
-    const src_dir = path.join(state.root_dir, 'src')
+    const src_dir = path.join(state.root_dir, state.source_dir)
     if (!existsSync(src_dir)) return
 
     const files = get_svelte_files(src_dir).filter(
-        file => normalize_path(file) !== normalize_path(path.join(state.root_dir, 'src/components/Icon.svelte')),
+        file => normalize_path(file) !== normalize_path(path.join(state.root_dir, `${state.source_dir}/components/Icon.svelte`)),
     )
     for (const file_path of files) {
         const relative_path = normalize_path(path.relative(state.root_dir, file_path))
@@ -187,7 +182,7 @@ function to_lucide_icon_ids_array(ids: string[]): string {
 }
 
 function migrate_icon_component(state: State): void {
-    const relative_path = 'src/components/Icon.svelte'
+    const relative_path = `${state.source_dir}/components/Icon.svelte`
     const before = read_text_file(state, relative_path)
     if (before == null) return
 
@@ -276,7 +271,7 @@ const computed_stroke_width = $derived(
 }
 
 function migrate_css(state: State): void {
-    update_text_file(state, 'src/css/base.css', before => {
+    update_text_file(state, `${state.source_dir}/css/base.css`, before => {
         if (before.includes('.icon-lucide {')) return before
         const block = `.icon-lucide {\n  color: inherit;\n  fill: none;\n}\n\n`
         if (before.includes('/* Search */')) return before.replace('/* Search */', `${block}/* Search */`)
@@ -362,15 +357,24 @@ function run_all_migrations(state: State): void {
     migrate_vite_config(state)
     migrate_build_script(state)
     migrate_package_json(state)
-    delete_file(state, 'src/components/lucide-icons.js')
 }
 
 export function run_lucide_sprite_codemod(
     user: RunLucideSpriteCodemodOptions = {},
 ): RunLucideSpriteCodemodResult {
+    const root_dir = user.root_dir ?? process.cwd()
+    const source_dir = normalize_path(user.source_dir ?? 'src')
+    if (!existsSync(path.join(root_dir, source_dir))) {
+        const message = user.source_dir
+            ? `--source-dir "${source_dir}" was not found`
+            : 'Default source directory "./src" was not found. Pass --source-dir <dir>.'
+        throw new Error(message)
+    }
+
     const state: State = {
-        root_dir: user.root_dir ?? process.cwd(),
+        root_dir,
         dry_run: !!user.dry_run,
+        source_dir,
         changed_files: [],
         found_lucide_ids: new Set<string>(),
     }

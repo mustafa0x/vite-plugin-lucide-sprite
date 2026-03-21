@@ -43,6 +43,8 @@ pnpm exec vite-plugin-lucide-sprite
 pnpm exec vite-plugin-lucide-sprite --force
 ```
 
+Default source directory is `./src`; pass `--source-dir <dir>` if your app uses another directory.
+
 Safety behavior:
 
 - By default, the codemod exits if `git status --porcelain` is not clean.
@@ -52,11 +54,8 @@ What it migrates:
 
 - Replaces mapped `@lucide/svelte` component usages with `<Icon id="...">`
 - Updates/cleans `@lucide/svelte` imports
-- Migrates `src/components/Icon.svelte` to sprite-based behavior
-- Adds `.icon-lucide` CSS in `src/css/base.css`
-- Adds `lucide_sprite_plugin()` to `vite.config.js`
-- Updates `build.js` sprite-copy flow
-- Updates `package.json` dependencies (`lucide-static`, `vite-plugin-lucide-sprite`) and removes `predev`/`prebuild`
+- Migrates `<source_dir>/components/Icon.svelte` to sprite-based behavior
+- Updates common project files when matching patterns are found (`vite.config.js`, `package.json`, and optional build/CSS files)
 
 Current component mapping:
 

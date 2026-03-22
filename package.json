@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-lucide-sprite",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Vite plugin that generates a Lucide SVG sprite from icon ids exported in a Svelte component",
   "type": "module",
   "main": "./dist/index.js",

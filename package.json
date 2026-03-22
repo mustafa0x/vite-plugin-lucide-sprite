@@ -49,6 +49,9 @@
     "vite": ">=5",
     "svelte": ">=5"
   },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "svelte": "^5.46.1",

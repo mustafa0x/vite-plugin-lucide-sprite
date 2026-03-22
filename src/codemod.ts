@@ -1,5 +1,6 @@
 import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync} from 'node:fs'
 import path from 'node:path'
+import {parse as parse_jsonc, type ParseError} from 'jsonc-parser'
 
 export type RunLucideSpriteCodemodOptions = {
     root_dir?: string
@@ -272,7 +273,14 @@ function migrate_tsconfig_alias(state: State, relative_path: string): void {
     const before = read_text_file(state, relative_path)
     if (before == null) return
 
-    const config = JSON.parse(before) as Record<string, any>
+    const parse_errors: ParseError[] = []
+    const config = parse_jsonc(before, parse_errors, {
+        allowTrailingComma: true,
+        disallowComments: false,
+    }) as Record<string, any>
+    if (parse_errors.length > 0 || !config || typeof config !== 'object' || Array.isArray(config)) {
+        throw new Error(`Could not parse ${relative_path}.`)
+    }
     const prev_base_url = config.compilerOptions?.baseUrl
     const prev_alias = config.compilerOptions?.paths?.$icon
 

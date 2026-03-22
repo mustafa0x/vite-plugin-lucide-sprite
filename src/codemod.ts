@@ -14,16 +14,9 @@ export type RunLucideSpriteCodemodResult = {
     dry_run: boolean
 }
 
-const lucide_component_to_id: Record<string, string> = {
-    Check: 'check',
-    ChevronDown: 'chevron-down',
+const lucide_component_to_id_override: Record<string, string> = {
     Loader2: 'loader-circle',
     LoaderCircle: 'loader-circle',
-    Moon: 'moon',
-    Sun: 'sun',
-    Trash: 'trash',
-    WifiOff: 'wifi-off',
-    X: 'x',
 }
 
 type State = {
@@ -77,66 +70,216 @@ function get_svelte_files(dir_path: string): string[] {
     return results
 }
 
-function replace_lucide_components(state: State, source: string, names_to_replace: string[]) {
+function escape_regex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function strip_lucide_imports(source: string): string {
+    return source
+        .replace(/import\s*\{[^}]*\}\s*from\s*['"]@lucide\/svelte['"]\s*;?\s*\n?/g, '')
+        .replace(/import\s+[A-Za-z_$][\w$]*\s+from\s+['"]@lucide\/svelte\/icons\/[^'"]+['"]\s*;?\s*\n?/g, '')
+}
+
+function strip_comments(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1')
+}
+
+function identifier_is_used_outside_lucide_imports(source: string, identifier: string): boolean {
+    const without_imports = strip_comments(strip_lucide_imports(source))
+    return new RegExp(`\\b${escape_regex(identifier)}\\b`).test(without_imports)
+}
+
+function lucide_component_to_id(component_name: string): string | null {
+    const normalized = component_name.endsWith('Icon') ? component_name.slice(0, -4) : component_name
+    const override = lucide_component_to_id_override[normalized]
+    if (override) return override
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(normalized)) return null
+    return normalized
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/([A-Za-z])([0-9])/g, '$1-$2')
+        .replace(/([0-9])([A-Za-z])/g, '$1-$2')
+        .toLowerCase()
+}
+
+function replace_lucide_component(state: State, source: string, component_name: string, icon_id: string) {
     let output = source
     let changed = false
+    const escaped_name = escape_regex(component_name)
 
-    for (const name of names_to_replace) {
-        const icon_id = lucide_component_to_id[name]
-        if (!icon_id) continue
+    const self_closing = new RegExp(`<${escaped_name}(\\s[^>]*?)?\\s*\\/\\s*>`, 'g')
+    output = output.replace(self_closing, (_match, attrs = '') => {
+        changed = true
+        state.found_lucide_ids.add(icon_id)
+        return `<Icon id="${icon_id}"${attrs} />`
+    })
 
-        const self_closing = new RegExp(`<${name}(\\s[^>]*?)?\\s*\\/\\s*>`, 'g')
-        output = output.replace(self_closing, (_match, attrs = '') => {
-            changed = true
-            state.found_lucide_ids.add(icon_id)
-            return `<Icon id="${icon_id}"${attrs} />`
-        })
-
-        const paired = new RegExp(`<${name}(\\s[^>]*?)?>([\\s\\S]*?)<\\/${name}>`, 'g')
-        output = output.replace(paired, (_match, attrs = '', inner = '') => {
-            changed = true
-            state.found_lucide_ids.add(icon_id)
-            return `<Icon id="${icon_id}"${attrs}>${inner}</Icon>`
-        })
-    }
+    const paired = new RegExp(`<${escaped_name}(\\s[^>]*?)?>([\\s\\S]*?)<\\/${escaped_name}>`, 'g')
+    output = output.replace(paired, (_match, attrs = '', inner = '') => {
+        changed = true
+        state.found_lucide_ids.add(icon_id)
+        return `<Icon id="${icon_id}"${attrs}>${inner}</Icon>`
+    })
 
     return {output, changed}
 }
 
-function remove_lucide_import_specifiers(source: string, names_to_remove: Set<string>) {
-    const import_regex = /import\s*\{([\s\S]*?)\}\s*from\s*['"]@lucide\/svelte['"]\s*;?\s*\n?/m
-    const match = source.match(import_regex)
-    if (!match) return {output: source, removed_any: false}
-
-    const full_import = match[0]
-    const specifier_text = match[1]
-    const specifiers = specifier_text
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-
-    const kept_specifiers = specifiers.filter(spec => !names_to_remove.has(spec))
-    const removed_any = kept_specifiers.length !== specifiers.length
-    if (!removed_any) return {output: source, removed_any: false}
-
-    if (kept_specifiers.length === 0) {
-        return {output: source.replace(full_import, ''), removed_any: true}
-    }
-
-    const replacement = `import {${kept_specifiers.join(', ')}} from '@lucide/svelte'\n`
-    return {output: source.replace(full_import, replacement), removed_any: true}
+function replace_lucide_object_value(state: State, source: string, component_name: string, icon_id: string) {
+    let output = source
+    let changed = false
+    const escaped_name = escape_regex(component_name)
+    const object_value = new RegExp(
+        `([,{]\\s*(?:[A-Za-z_$][\\w$]*|['"][^'"]+['"]|\\[[^\\]]+\\])\\s*:\\s*)${escaped_name}\\b`,
+        'g',
+    )
+    output = output.replace(object_value, (_match, prefix = '') => {
+        changed = true
+        state.found_lucide_ids.add(icon_id)
+        return `${prefix}'${icon_id}'`
+    })
+    return {output, changed}
 }
 
-function ensure_icon_import(source: string, import_path: string): string {
-    if (source.includes(`from '${import_path}'`) || source.includes(`from "${import_path}"`)) return source
+function parse_named_lucide_specifier(specifier: string): {imported: string; local: string} | null {
+    const match = specifier.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/)
+    if (!match) return null
+    return {
+        imported: match[1],
+        local: match[2] ?? match[1],
+    }
+}
+
+function migrate_named_lucide_imports(state: State, source: string) {
+    let output = source
+    const matches = [...output.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@lucide\/svelte['"]\s*;?\s*\n?/g)]
+    let changed_any = false
+
+    for (const match of matches) {
+        const full_import = match[0]
+        const specifier_text = match[1]
+        const raw_specifiers = specifier_text
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean)
+
+        const remove_specifiers = new Set<string>()
+        for (const raw_specifier of raw_specifiers) {
+            const parsed = parse_named_lucide_specifier(raw_specifier)
+            if (!parsed) continue
+            const icon_id = lucide_component_to_id(parsed.imported)
+            if (!icon_id) continue
+            const markup_replaced = replace_lucide_component(state, output, parsed.local, icon_id)
+            output = markup_replaced.output
+            const object_replaced = replace_lucide_object_value(state, output, parsed.local, icon_id)
+            output = object_replaced.output
+            if (!markup_replaced.changed && !object_replaced.changed) continue
+            changed_any = true
+            if (!identifier_is_used_outside_lucide_imports(output, parsed.local)) {
+                remove_specifiers.add(raw_specifier)
+            }
+        }
+
+        if (remove_specifiers.size === 0) continue
+        const kept_specifiers = raw_specifiers.filter(specifier => !remove_specifiers.has(specifier))
+        if (kept_specifiers.length === 0) {
+            output = output.replace(full_import, '')
+            continue
+        }
+        const replacement = `import {${kept_specifiers.join(', ')}} from '@lucide/svelte'\n`
+        output = output.replace(full_import, replacement)
+    }
+
+    return {output, changed: changed_any}
+}
+
+function migrate_subpath_lucide_imports(state: State, source: string) {
+    let output = source
+    const matches = [...output.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]@lucide\/svelte\/icons\/([^'"]+)['"]\s*;?\s*\n?/g)]
+    let changed_any = false
+
+    for (const match of matches) {
+        const full_import = match[0]
+        const local_name = match[1]
+        const icon_id = normalize_path(match[2]).split('/').pop()?.replace(/\.[a-z]+$/i, '') ?? ''
+        if (!icon_id) continue
+        const markup_replaced = replace_lucide_component(state, output, local_name, icon_id)
+        output = markup_replaced.output
+        const object_replaced = replace_lucide_object_value(state, output, local_name, icon_id)
+        output = object_replaced.output
+        if (!markup_replaced.changed && !object_replaced.changed) continue
+        changed_any = true
+        if (!identifier_is_used_outside_lucide_imports(output, local_name)) {
+            output = output.replace(full_import, '')
+        }
+    }
+
+    return {output, changed: changed_any}
+}
+
+function migrate_dynamic_icon_tags(source: string) {
+    let output = source
+    let changed = false
+    const dynamic_icon_regex = /<Icon(\s[^>]*?)?\s*\/>/g
+    output = output.replace(dynamic_icon_regex, (match, attrs = '') => {
+        if (/\bid\s*=/.test(attrs)) return match
+        changed = true
+        return `{#if typeof Icon === 'string'}
+    <SpriteIcon id={Icon}${attrs} />
+{:else}
+    {@const DynamicIcon = Icon}
+    <DynamicIcon${attrs} />
+{/if}`
+    })
+    return {output, changed}
+}
+
+function migrate_deprecated_dynamic_icon_component(source: string) {
+    let output = source
+    let changed = false
+    const deprecated_regex = /<svelte:component\s+this=\{Icon\}(\s[^>]*?)?\s*\/>/g
+    output = output.replace(deprecated_regex, (_match, attrs = '') => {
+        changed = true
+        return `{@const DynamicIcon = Icon}
+    <DynamicIcon${attrs} />`
+    })
+    return {output, changed}
+}
+
+function migrate_icons_lookup_map(state: State, source: string) {
+    if (!source.includes('{@const Icon = icons[')) return {output: source, changed: false}
+
+    const icons_map_regex = /\b(?:const|let|var)\s+icons\s*=\s*\{([\s\S]*?)\}/m
+    const match = source.match(icons_map_regex)
+    if (!match) return {output: source, changed: false}
+
+    const body = match[1]
+    let body_changed = false
+    const next_body = body.replace(/(:\s*)([A-Za-z_$][\w$]*)\b/g, (segment, prefix = '', value = '') => {
+        const icon_id = lucide_component_to_id(value)
+        if (!icon_id) return segment
+        body_changed = true
+        state.found_lucide_ids.add(icon_id)
+        return `${prefix}'${icon_id}'`
+    })
+    if (!body_changed) return {output: source, changed: false}
+
+    return {output: source.replace(body, next_body), changed: true}
+}
+
+function ensure_default_import(source: string, import_path: string, local_name: string): string {
+    const import_regex = new RegExp(
+        `import\\s+${escape_regex(local_name)}\\s+from\\s+['"]${escape_regex(import_path)}['"]`,
+    )
+    if (import_regex.test(source)) return source
 
     const script_block_regex = /<script(\s[^>]*)?>/
     const script_match = source.match(script_block_regex)
-    if (!script_match) return `<script>\nimport Icon from '${import_path}'\n</script>\n\n${source}`
+    if (!script_match) return `<script>\nimport ${local_name} from '${import_path}'\n</script>\n\n${source}`
 
     const start_index = script_match.index ?? 0
     const insert_index = start_index + script_match[0].length
-    return `${source.slice(0, insert_index)}\nimport Icon from '${import_path}'${source.slice(insert_index)}`
+    return `${source.slice(0, insert_index)}\nimport ${local_name} from '${import_path}'${source.slice(insert_index)}`
 }
 
 function migrate_svelte_files(state: State): void {
@@ -149,32 +292,36 @@ function migrate_svelte_files(state: State): void {
     for (const file_path of files) {
         const relative_path = normalize_path(path.relative(state.root_dir, file_path))
         update_text_file(state, relative_path, before => {
-            const import_match = before.match(/import\s*\{([\s\S]*?)\}\s*from\s*['"]@lucide\/svelte['"]\s*;?\s*\n?/m)
-            if (!import_match) return before
+            const named_result = migrate_named_lucide_imports(state, before)
+            const subpath_result = migrate_subpath_lucide_imports(state, named_result.output)
+            const map_result = migrate_icons_lookup_map(state, subpath_result.output)
+            const dynamic_result = migrate_dynamic_icon_tags(map_result.output)
+            const deprecated_result = migrate_deprecated_dynamic_icon_component(dynamic_result.output)
+            if (
+                !named_result.changed &&
+                !subpath_result.changed &&
+                !map_result.changed &&
+                !dynamic_result.changed &&
+                !deprecated_result.changed
+            ) {
+                return before
+            }
 
-            const names = import_match[1]
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean)
-            const names_to_replace = names.filter(name => lucide_component_to_id[name])
-            if (names_to_replace.length === 0) return before
-
-            const {output: replaced_markup, changed} = replace_lucide_components(state, before, names_to_replace)
-            if (!changed) return before
-
-            const {output: without_lucide_import} = remove_lucide_import_specifiers(
-                replaced_markup,
-                new Set(names_to_replace),
-            )
-
-            return ensure_icon_import(without_lucide_import, '$icon')
+            let next = deprecated_result.output
+            if (named_result.changed || subpath_result.changed) {
+                next = ensure_default_import(next, '$icon', 'Icon')
+            }
+            if (dynamic_result.changed) {
+                next = ensure_default_import(next, '$icon', 'SpriteIcon')
+            }
+            return next
         })
     }
 }
 
 function to_lucide_icon_ids_array(ids: string[]): string {
-    if (ids.length === 0) return 'export const LUCIDE_ICON_IDS = []'
-    return `export const LUCIDE_ICON_IDS = [\n${ids.map(id => `    '${id}',`).join('\n')}\n]`
+    if (ids.length === 0) return 'export const LUCIDE_ICON_IDS = /** @type {const} */ ([])'
+    return `export const LUCIDE_ICON_IDS = /** @type {const} */ ([\n${ids.map(id => `    '${id}',`).join('\n')}\n])`
 }
 
 function create_icon_component(state: State): void {
@@ -187,6 +334,15 @@ ${to_lucide_icon_ids_array(icon_ids)}
 </script>
 
 <script>
+/** @type {{
+    id: typeof LUCIDE_ICON_IDS[number]
+    class?: string
+    size?: number | string
+    color?: string
+    strokeWidth?: number
+    absoluteStrokeWidth?: boolean
+    [x: string]: any
+}} */
 let {
     id,
     class: class_name = '',
@@ -255,15 +411,19 @@ function migrate_vite_config(state: State): void {
                 /import lucide_sprite_plugin from ['"].*?vite-plugin-lucide-sprite.*?['"]\n?/g,
                 '',
             )
-            next = next.replace(
-                /import pkg from '\.\/package\.json' with \{type: 'json'\}\n/,
-                match => `${match}${import_line}`,
-            )
+            next = `${import_line}${next}`
         }
         if (next.includes('lucide_sprite_plugin(')) {
             next = next.replace(/lucide_sprite_plugin\([^)]*\),/g, plugin_call)
         } else {
             next = next.replace(/plugins:\s*\[\n/, match => `${match}        ${plugin_call}\n`)
+        }
+        if (!/\$icon\s*:/.test(next)) {
+            const icon_component_path = state.icon_component_path.replace(/^\/+/, '')
+            next = next.replace(
+                /alias:\s*\{\n/,
+                match => `${match}            $icon: '/${icon_component_path}',\n`,
+            )
         }
         return next
     })

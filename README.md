@@ -68,17 +68,11 @@ What it migrates:
 - Creates `Icon.svelte` if missing
 - Updates matching core files (`<source_dir>/css/base.css`, `vite.config.js`, `package.json`, `tsconfig.json`/`jsconfig.json`)
 
-Current component mapping:
+Icon id mapping:
 
-- `Check -> check`
-- `ChevronDown -> chevron-down`
-- `Loader2 -> loader-circle`
-- `LoaderCircle -> loader-circle`
-- `Moon -> moon`
-- `Sun -> sun`
-- `Trash -> trash`
-- `WifiOff -> wifi-off`
-- `X -> x`
+- Named imports from `@lucide/svelte` are converted from component name to kebab-case id.
+- Default imports from `@lucide/svelte/icons/*` use the icon path segment as id.
+- Special case: `Loader2`/`LoaderCircle` map to `loader-circle`.
 
 ## Quick start
 
@@ -97,10 +91,11 @@ export default defineConfig({
 
 ```svelte
 <script module>
-export const LUCIDE_ICON_IDS = ['check', 'x', 'sun', 'moon']
+export const LUCIDE_ICON_IDS = /** @type {const} */ (['check', 'x', 'sun', 'moon'])
 </script>
 
 <script>
+/** @type {{ id: typeof LUCIDE_ICON_IDS[number], size?: number|string, color?: string, [x: string]: any }} */
 let {id, size = 24, color = 'currentColor', ...rest} = $props()
 
 const sprite_href = $derived(`${import.meta.env.BASE_URL}lucide.svg#${id}`)

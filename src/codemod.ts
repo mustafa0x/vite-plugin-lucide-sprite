@@ -141,6 +141,18 @@ function replace_lucide_object_value(state: State, source: string, component_nam
     return {output, changed}
 }
 
+function replace_lucide_component_props_type(source: string, component_name: string) {
+    let output = source
+    let changed = false
+    const escaped_name = escape_regex(component_name)
+    const component_props_regex = new RegExp(`ComponentProps<\\s*typeof\\s+${escaped_name}\\s*>`, 'g')
+    output = output.replace(component_props_regex, () => {
+        changed = true
+        return "Omit<ComponentProps<typeof Icon>, 'id'>"
+    })
+    return {output, changed}
+}
+
 function parse_named_lucide_specifier(specifier: string): {imported: string; local: string} | null {
     const match = specifier.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/)
     if (!match) return null
@@ -173,7 +185,9 @@ function migrate_named_lucide_imports(state: State, source: string) {
             output = markup_replaced.output
             const object_replaced = replace_lucide_object_value(state, output, parsed.local, icon_id)
             output = object_replaced.output
-            if (!markup_replaced.changed && !object_replaced.changed) continue
+            const type_replaced = replace_lucide_component_props_type(output, parsed.local)
+            output = type_replaced.output
+            if (!markup_replaced.changed && !object_replaced.changed && !type_replaced.changed) continue
             changed_any = true
             if (!identifier_is_used_outside_lucide_imports(output, parsed.local)) {
                 remove_specifiers.add(raw_specifier)
@@ -207,7 +221,9 @@ function migrate_subpath_lucide_imports(state: State, source: string) {
         output = markup_replaced.output
         const object_replaced = replace_lucide_object_value(state, output, local_name, icon_id)
         output = object_replaced.output
-        if (!markup_replaced.changed && !object_replaced.changed) continue
+        const type_replaced = replace_lucide_component_props_type(output, local_name)
+        output = type_replaced.output
+        if (!markup_replaced.changed && !object_replaced.changed && !type_replaced.changed) continue
         changed_any = true
         if (!identifier_is_used_outside_lucide_imports(output, local_name)) {
             output = output.replace(full_import, '')

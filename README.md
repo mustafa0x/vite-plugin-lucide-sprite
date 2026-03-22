@@ -4,9 +4,7 @@ Vite plugin that generates a Lucide SVG sprite (`lucide.svg`) from icon ids expo
 
 ## Why
 
-This avoids repeating full SVG path markup every time an icon appears in your HTML.
-
-It is not only about the ~0.5 KB per-icon overhead. Moving SVG paths out of your JavaScript bundle is a major win for bundle size and parse/execute cost as well.
+This avoids repeating full SVG path markup, and the benefit is not only the ~0.5 KB per-icon overhead: moving SVG paths out of your JavaScript bundle also reduces bundle size and parse/execute cost. Byte for byte, JavaScript is typically your most expensive asset to ship.
 
 - A typical Lucide SVG file is around `0.4-0.5 KB` raw:
   - measured against `lucide-static@0.577.0`: median `464 B`, average `480 B` across `1951` icons

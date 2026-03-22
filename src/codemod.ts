@@ -369,6 +369,12 @@ let {
     ...rest
 } = $props()
 
+if (import.meta.env.DEV) {
+    $effect(() => {
+        if (!LUCIDE_ICON_IDS.includes(id)) console.error(\`[Icon] Unknown lucide icon id: \${id}\`)
+    })
+}
+
 const sprite_href = $derived(\`\${import.meta.env.BASE_URL}lucide.svg#\${id}\`)
 const size_css = $derived.by(() => {
     if (size == null) return undefined

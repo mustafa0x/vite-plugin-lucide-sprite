@@ -335,9 +335,9 @@ function migrate_svelte_files(state: State): void {
     }
 }
 
-function to_lucide_icon_ids_array(ids: string[]): string {
-    if (ids.length === 0) return 'export const LUCIDE_ICON_IDS = /** @type {const} */ ([])'
-    return `export const LUCIDE_ICON_IDS = /** @type {const} */ ([\n${ids.map(id => `    '${id}',`).join('\n')}\n])`
+function to_icon_ids_array(ids: string[]): string {
+    if (ids.length === 0) return 'export const ICON_IDS = /** @type {const} */ ([])'
+    return `export const ICON_IDS = /** @type {const} */ ([\n${ids.map(id => `    '${id}',`).join('\n')}\n])`
 }
 
 function create_icon_component(state: State): void {
@@ -346,12 +346,12 @@ function create_icon_component(state: State): void {
 
     const icon_ids = [...state.found_lucide_ids].sort()
     const content = `<script module>
-${to_lucide_icon_ids_array(icon_ids)}
+${to_icon_ids_array(icon_ids)}
 </script>
 
 <script>
 /** @type {{
-    id: typeof LUCIDE_ICON_IDS[number]
+    id: typeof ICON_IDS[number]
     class?: string
     size?: number | string
     color?: string
@@ -371,11 +371,11 @@ let {
 
 if (import.meta.env.DEV) {
     $effect(() => {
-        if (!LUCIDE_ICON_IDS.includes(id)) console.error(\`[Icon] Unknown lucide icon id: \${id}\`)
+        if (!ICON_IDS.includes(id)) console.error(\`[Icon] Unknown lucide icon id: \${id}\`)
     })
 }
 
-const sprite_href = $derived(\`\${import.meta.env.BASE_URL}lucide.svg#\${id}\`)
+const sprite_href = $derived(\`\${import.meta.env.BASE_URL}icons.svg#le-\${id}\`)
 const size_css = $derived.by(() => {
     if (size == null) return undefined
     if (typeof size === 'number') return \`\${size}px\`
@@ -423,20 +423,22 @@ function migrate_css(state: State): void {
 function migrate_vite_config(state: State): void {
     update_text_file(state, 'vite.config.js', before => {
         let next = before
-        const import_line = "import lucide_sprite_plugin from 'vite-plugin-lucide-sprite'\n"
+        const import_line = "import icon_sprite_plugin from 'vite-plugin-lucide-sprite'\n"
         const plugin_call =
             state.icon_component_path === 'src/components/Icon.svelte'
-                ? 'lucide_sprite_plugin(),'
-                : `lucide_sprite_plugin({icon_component_path: '${state.icon_component_path}'}),`
+                ? 'icon_sprite_plugin(),'
+                : `icon_sprite_plugin({icon_component_path: '${state.icon_component_path}'}),`
         if (!next.includes(import_line.trim())) {
             next = next.replace(
-                /import lucide_sprite_plugin from ['"].*?vite-plugin-lucide-sprite.*?['"]\n?/g,
+                /import (?:lucide_sprite_plugin|icon_sprite_plugin) from ['"].*?vite-plugin-lucide-sprite.*?['"]\n?/g,
                 '',
             )
             next = `${import_line}${next}`
         }
-        if (next.includes('lucide_sprite_plugin(')) {
-            next = next.replace(/lucide_sprite_plugin\([^)]*\),/g, plugin_call)
+        if (next.includes('lucide_sprite_plugin(') || next.includes('icon_sprite_plugin(')) {
+            next = next
+                .replace(/lucide_sprite_plugin\([^)]*\),/g, plugin_call)
+                .replace(/icon_sprite_plugin\([^)]*\),/g, plugin_call)
         } else {
             next = next.replace(/plugins:\s*\[\n/, match => `${match}        ${plugin_call}\n`)
         }

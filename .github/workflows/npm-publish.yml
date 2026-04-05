@@ -23,5 +23,11 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: npm publish
+      - run: pnpm -s build
+
+      - run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG=latest
+          [[ "$VERSION" == *-* ]] && TAG=next
+          [[ "$VERSION" == *-beta.* ]] && TAG=beta
+          npm publish --access public --provenance --tag $TAG

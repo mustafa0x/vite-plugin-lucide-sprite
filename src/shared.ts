@@ -123,7 +123,7 @@ function to_symbol_id(icon_id: string): string {
 }
 
 function minify_svg(svg: string): string {
-    return svg.replace(/\n\s*/g, '').replace(/>\s+</g, '><').trim()
+    return svg.replace(/\n\s*/g, ' ').replace(/>\s+</g, '><').trim()
 }
 
 function render_symbol(id: string, attrs: string, inner_svg: string): string {
